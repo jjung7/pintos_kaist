@@ -131,14 +131,14 @@ static void
 timer_interrupt(struct intr_frame *args UNUSED)
 {
 	ticks++;
-	thread_tick();
+	thread_tick ();
 
 	// enum intr_level old_level = intr_disable();
 	/* 	code to add:
-		check sleep list and the global tick.
-		find any threads to wake up,
-		move them to the ready list if necessary.
-		update the global tick.
+   		check sleep list and the global tick.
+   		find any threads to wake up,
+   		move them to the ready list if necessary.
+   		update the global tick.
 		+ wake_up() 함수에 구현했다.
 	*/
 	wake_up(ticks);
@@ -156,9 +156,9 @@ too_many_loops(unsigned loops)
 		barrier();
 
 	/* Run LOOPS loops. */
-	start = ticks;
-	start = ticks;
-	busy_wait(loops);
+	start = ticks; 
+	start = ticks; 
+	busy_wait (loops);
 
 	/* If the tick count changed, we iterated too long. */
 	barrier();
