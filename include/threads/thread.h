@@ -101,7 +101,7 @@ struct thread {
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
 
-	//추가한 필드
+	//추가한 필드	
 	struct lock *wait_on_lock;          /* 대가중인 LOCK */
     struct list donations;              /* donation list */
     struct list_elem donation_elem;     /* donation element */
@@ -121,9 +121,13 @@ struct thread {
 	struct semaphore exit_sema;			/* 종료 확인 */
 	struct semaphore wait_sema;			/* 기다림 확인 */
 
+	struct hash *vm; /* 스레드가 가진 가상 주소 공간을 관리하는 해시테이블 */
+	
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */
+	uint64_t *pagedir
+
 #endif
 #ifdef VM
 	/* Table for whole virtual memory owned by thread. */

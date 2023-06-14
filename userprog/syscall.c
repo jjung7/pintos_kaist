@@ -120,6 +120,15 @@ void syscall_handler(struct intr_frame *f UNUSED)
 	case SYS_CLOSE:
 		close(f->R.rdi);
 		break;
+
+	case SYS_MMAP:
+		mmap();
+		break;
+	
+	case SYS_MUNMAP:
+		munmap();
+		break;
+
 	default:
 		exit(-1);
 		break;
