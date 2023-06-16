@@ -793,33 +793,33 @@ void argument_stack(char **argv, int argc, void **rsp)
 	(*rsp) -= 8; // return 값의 주소인 fake address 저장
 	**(void ***)rsp = 0;
 }
-static void argument_stack(char *argv[], int argc, char **sp)
-{
-	int start = 4;
-	for (int i = argc - 1; i >= 0; i--)
-	{
-		strlcpy(*sp, argv[i], strlen(argv[i]) + 1);
-		*sp = *sp - strlen(argv[i]) + 1;
-		start += strlen(argv[i] + 1);
-		argv[i] = *sp;
-	}
-	memset(*sp, 0, 8 - (start % 8) == 8 ? 0 : start % 8);
+// static void argument_stack(char *argv[], int argc, char **sp)
+// {
+// 	int start = 4;
+// 	for (int i = argc - 1; i >= 0; i--)
+// 	{
+// 		strlcpy(*sp, argv[i], strlen(argv[i]) + 1);
+// 		*sp = *sp - strlen(argv[i]) + 1;
+// 		start += strlen(argv[i] + 1);
+// 		argv[i] = *sp;
+// 	}
+// 	memset(*sp, 0, 8 - (start % 8) == 8 ? 0 : start % 8);
 
-	*sp -= 8 - (start % 8) == 8 ? 0 : start % 8;
-	**sp = 0;
-	*sp -= 1;
+// 	*sp -= 8 - (start % 8) == 8 ? 0 : start % 8;
+// 	**sp = 0;
+// 	*sp -= 1;
 
-	for (int j = argc; j >= 0; j--)
-	{
-		strlcpy(*sp, &argv[j], 4);
-		*sp = *sp - 4;
-	}
-	strlcpy(*sp, argc, 4);
-	*sp = *sp - 4;
-	strlcpy(*sp, 0, 0);
-	*sp = *sp - 4;
-	return *sp;
-}
+// 	for (int j = argc; j >= 0; j--)
+// 	{
+// 		strlcpy(*sp, &argv[j], 4);
+// 		*sp = *sp - 4;
+// 	}
+// 	strlcpy(*sp, argc, 4);
+// 	*sp = *sp - 4;
+// 	strlcpy(*sp, 0, 0);
+// 	*sp = *sp - 4;
+// 	return *sp;
+// }
 /*
  * 자식 리스트에서 child_tid를 가진 스레드 찾는 함수
  */
