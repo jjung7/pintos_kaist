@@ -2,6 +2,8 @@
 #define VM_VM_H
 #include <stdbool.h>
 #include "threads/palloc.h"
+#include "lib/kernel/hash.h"
+#include "threads/vaddr.h"
 
 enum vm_type
 {
@@ -27,13 +29,14 @@ enum vm_type
 #include "vm/uninit.h"
 #include "vm/anon.h"
 #include "vm/file.h"
+// #include "threads/thread.h"
 #ifdef EFILESYS
-#include "filesys/page_cche.ha"
+#include "filesys/page_cache.h"
 #endif
 
 struct page_operations;
 struct thread;
-
+struct lock *frame_page_table_lock;
 #define VM_TYPE(type) ((type)&7)
 
 /* The representation of "page".
@@ -45,9 +48,11 @@ struct page
 	const struct page_operations *operations;
 	void *va;			 /* Address in terms of user space */
 	struct frame *frame; /* Back reference for frame */
+	// struct vm_entry vm_entry;
+	bool writable;
 
+	struct hash_elem hash_elem;
 	/* Your implementation */
-
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */
 	union
@@ -66,6 +71,8 @@ struct frame
 {
 	void *kva;
 	struct page *page;
+	struct thread *thread;
+	struct list_elem lru_elem;
 };
 
 /* The function table for page operations.
@@ -80,25 +87,25 @@ struct page_operations
 	enum vm_type type;
 };
 
-struct vm_entry
-{
-	enum vm_type type;
-	void *vaddr;
-	bool writeable;
+// struct vm_entry
+// {
+// 	enum vm_type type;
+// 	void *vaddr;
+// 	bool writeable;
 
-	bool is_loaded;
-	struct file *file;
+// 	bool is_loaded;
+// 	struct file *file;
 
-	struct list_elem mmap_elem;
+// 	struct list_elem mmap_elem;
 
-	size_t offset;
-	size_t read_bytes;
-	size_t zero_bytes;
+// 	size_t offset;
+// 	size_t read_bytes;
+// 	size_t zero_bytes;
 
-	size_t swap_slot;
+// 	size_t swap_slot;
 
-	struct hash_elem elem;
-}
+// 	struct hash_elem elem;
+// }
 
 #define swap_in(page, v) (page)->operations->swap_in((page), v)
 #define swap_out(page) (page)->operations->swap_out(page)
@@ -111,6 +118,7 @@ struct vm_entry
  * All designs up to you for this. */
 struct supplemental_page_table
 {
+	struct hash *pages;
 };
 
 struct frame_page_table
@@ -120,12 +128,10 @@ struct frame_page_table
 	void *va;
 	void *pa;			 /* Address in terms of user space */
 	struct frame *frame; /* Back reference for frame */
-
-}
-
+};
+#include "threads/interrupt.h"
 #include "threads/thread.h"
-void
-supplemental_page_table_init(struct supplemental_page_table *spt);
+void supplemental_page_table_init(struct supplemental_page_table *spt);
 bool supplemental_page_table_copy(struct supplemental_page_table *dst,
 								  struct supplemental_page_table *src);
 void supplemental_page_table_kill(struct supplemental_page_table *spt);

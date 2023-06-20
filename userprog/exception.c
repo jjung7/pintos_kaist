@@ -125,8 +125,7 @@ page_fault(struct intr_frame *f)
 	bool write;		  /* True: access was write, false: access was read. */
 	bool user;		  /* True: access by user, false: access by kernel. */
 	void *fault_addr; /* Fault address. */
-	struct vm_entry *vme;
-	bool success;
+
 	/* Obtain faulting address, the virtual address that was
 	   accessed to cause the fault.  It may point to code or to
 	   data.  It is not necessarily the address of the instruction
@@ -143,35 +142,21 @@ page_fault(struct intr_frame *f)
 	write = (f->error_code & PF_W) != 0;
 	user = (f->error_code & PF_U) != 0;
 
-	if (not_present == true)
-	{
-		printf("Page fault at %p: %s error %s page in %s context.\n",
-			   fault_addr,
-			   not_present ? "not present" : "rights violation",
-			   write ? "writing" : "reading",
-			   user ? "user" : "kernel");
-		kill(f);
-	}
-	vme->addr = fault_addr;
-	success = handle_mm_fault(vme);
-	if (!success)
-		return -1;
-		// exit(-1);
-
 #ifdef VM
 	/* For project 3 and later. */
 	if (vm_try_handle_fault(f, fault_addr, user, write, not_present))
 		return;
 #endif
 
-	// /* Count page faults. */
-	// page_fault_cnt++;
+	/* Count page faults. */
+	page_fault_cnt++;
+	exit(-1);
 
-	// /* If the fault is true fault, show info and exit. */
-	// printf ("Page fault at %p: %s error %s page in %s context.\n",
-	// 		fault_addr,
-	// 		not_present ? "not present" : "rights violation",
-	// 		write ? "writing" : "reading",
-	// 		user ? "user" : "kernel");
-	// kill (f);
+	/* If the fault is true fault, show info and exit. */
+	printf("Page fault at %p: %s error %s page in %s context.\n",
+		   fault_addr,
+		   not_present ? "not present" : "rights violation",
+		   write ? "writing" : "reading",
+		   user ? "user" : "kernel");
+	kill(f);
 }

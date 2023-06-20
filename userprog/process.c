@@ -696,10 +696,19 @@ install_page(void *upage, void *kpage, bool writable)
 static bool
 lazy_load_segment(struct page *page, void *aux)
 {
-	/* TODO: Load the segment from the file */
-	/* TODO: This called when the first page fault occurs on address VA. */
-	/* TODO: VA is available when calling this function. */
-}
+	struct file_page *file_page = (struct file_page *)aux;
+	file_seek(file_page->file, file_page->ofs);
+	if (file_read(file_page->file, page->frame->kva, file_page->read_bytes) != (int)(file_page->read_bytes))
+	{
+		palloc_free_page(page->frame->kva);
+		return false;
+	}
+	memset(page->frame->kva + file_page->read_bytes, 0, file_page->zero_bytes);
+
+	return true;
+}; /* TODO: Load the segment from the file */
+   /* TODO: This called when the first page fault occurs on address VA. */
+   /* TODO: VA is available when calling this function. */
 
 /* Loads a segment starting at offset OFS in FILE at address
  * UPAGE.  In total, READ_BYTES + ZERO_BYTES bytes of virtual
@@ -732,15 +741,24 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
 		/* TODO: Set up aux to pass information to the lazy_load_segment. */
-		void *aux = NULL;
+		struct file_page *file_page = (struct file_page *)malloc(sizeof(struct file_page));
+		file_page->file = file;
+		file_page->ofs = ofs;
+		file_page->read_bytes = read_bytes;
+		file_page->zero_bytes = zero_bytes;
+
 		if (!vm_alloc_page_with_initializer(VM_ANON, upage,
-											writable, lazy_load_segment, aux))
+											writable, lazy_load_segment, file_page))
+		{
+			free(file_page);
 			return false;
+		}
 
 		/* Advance. */
 		read_bytes -= page_read_bytes;
 		zero_bytes -= page_zero_bytes;
 		upage += PGSIZE;
+		ofs += page_read_bytes;
 	}
 	return true;
 }
@@ -751,7 +769,12 @@ setup_stack(struct intr_frame *if_)
 {
 	bool success = false;
 	void *stack_bottom = (void *)(((uint8_t *)USER_STACK) - PGSIZE);
-
+	if (vm_alloc_page(VM_ANON | VM_MARKER_0, stack_bottom, true))
+	{
+		success = vm_claim_page(stack_bottom);
+		if (success)
+			if_->rsp = USER_STACK;
+	}
 	/* TODO: Map the stack on stack_bottom and claim the page immediately.
 	 * TODO: If success, set the rsp accordingly.
 	 * TODO: You should mark the page is stack. */
@@ -887,3 +910,24 @@ struct file *process_get_file(int fd)
 	}
 	return fdt[fd];
 }
+
+// bool handle_mm_fault(struct vm_entry *vme){
+// 	bool success;
+// 	void *kaddr;
+
+// 	switch(vme->type){
+// 		case VM_UNINIT:
+// 		success = load_file(kaddr,vme)
+// 		break;
+
+// 		case VM_FILE:
+// 		success = load_file(kaddr,vme)
+
+// 		case VM_ANON:
+// 		//swap in code
+// 		break
+
+// 		default:
+// 		break;
+// 	}
+// }
