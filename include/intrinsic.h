@@ -60,7 +60,7 @@ static __inline uint64_t rrax(void) {
 __attribute__((always_inline))
 static __inline uint64_t rrdi(void) {
 	uint64_t val;
-	__asm __volatile("movq %%rdi,%0" : "=r" (val));
+	__asm __volatile("movq %,%0" : "=r" (val));
 	return val;
 }
 

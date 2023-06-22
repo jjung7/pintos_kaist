@@ -2,6 +2,7 @@
 #define VM_VM_H
 #include <stdbool.h>
 #include "threads/palloc.h"
+#include "lib/kernel/hash.h"
 
 enum vm_type {
 	/* page not initialized */
@@ -40,13 +41,17 @@ struct thread;
  * This is kind of "parent class", which has four "child class"es, which are
  * uninit_page, file_page, anon_page, and page cache (project4).
  * DO NOT REMOVE/MODIFY PREDEFINED MEMBER OF THIS STRUCTURE. */
+ 
+ // 가상메모리에서의 페이지를 의미하는 구조체
 struct page {
 	const struct page_operations *operations;
 	void *va;              /* Address in terms of user space */
 	struct frame *frame;   /* Back reference for frame */
+	// struct vm_entry *vm_entry;
+	bool writable;
 
 	/* Your implementation */
-
+	struct hash_elem hash_elem;
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */
 	union {
@@ -61,7 +66,7 @@ struct page {
 
 /* The representation of "frame" */
 struct frame {
-	void *kva;
+	void *kva; //커널가상주소
 	struct page *page;
 };
 
@@ -69,6 +74,7 @@ struct frame {
  * This is one way of implementing "interface" in C.
  * Put the table of "method" into the struct's member, and
  * call it whenever you needed. */
+// 3개의 함수포인터를 포함한 함수 테이블
 struct page_operations {
 	bool (*swap_in) (struct page *, void *);
 	bool (*swap_out) (struct page *);
@@ -76,27 +82,27 @@ struct page_operations {
 	enum vm_type type;
 };
 
-struct vm_entry {
+// struct vm_entry {
 
-	enum vm_type type;
-	void* vaddr; /* vm_entry의 가상페이지 번호 */
-	bool writable;
+// 	enum vm_type type;
+// 	void* vaddr; /* vm_entry의 가상페이지 번호 */
+// 	bool writable;
 	
-	bool is_loaded;/* 물리메모리의 탑재 여부를 알려주는 플래그 */
-	struct file* file;/* 가상주소와 맵핑된 파일 */
+// 	bool is_loaded;/* 물리메모리의 탑재 여부를 알려주는 플래그 */
+// 	struct file* file;/* 가상주소와 맵핑된 파일 */
 
-	struct list_elem mmap_elem;
+// 	struct list_elem mmap_elem;
 
-	size_t offset; /* 읽어야 할 파일 오프셋 */
-	size_t read_bytes;
-	size_t zero_bytes;
+// 	size_t offset; /* 읽어야 할 파일 오프셋 */
+// 	size_t read_bytes;
+// 	size_t zero_bytes;
 
-	/* Swapping 과제에서 다룰 예정 */
-	size_t swap_slot; /* 스왑 슬롯 */
+// 	/* Swapping 과제에서 다룰 예정 */
+// 	size_t swap_slot; /* 스왑 슬롯 */
 
-	struct hash_elem elem;
+// 	struct hash_elem elem;
 
-}
+// }
 
 #define swap_in(page, v) (page)->operations->swap_in ((page), v)
 #define swap_out(page) (page)->operations->swap_out (page)
@@ -107,7 +113,11 @@ struct vm_entry {
  * We don't want to force you to obey any specific design for this struct.
  * All designs up to you for this. */
 struct supplemental_page_table {
-};
+
+	struct hash spt_hash;
+
+
+}
 
 #include "threads/thread.h"
 void supplemental_page_table_init (struct supplemental_page_table *spt);
@@ -132,3 +142,12 @@ bool vm_claim_page (void *va);
 enum vm_type page_get_type (struct page *page);
 
 #endif  /* VM_VM_H */
+
+struct mmap_file{
+
+	int mapid;
+	struct file* file;
+	struct list_elem elem;
+	struct list vme_list;
+
+}

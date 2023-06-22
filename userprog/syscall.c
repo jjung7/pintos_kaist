@@ -37,6 +37,10 @@ int write(int fd, const void *buffer, unsigned size);
 void seek(int fd, unsigned position);
 unsigned tell(int fd);
 void close(int fd);
+void *mmap (int fd, void* addr);
+void munmap (void *addr);
+	
+	
 
 /* System call.
  *
@@ -122,11 +126,11 @@ void syscall_handler(struct intr_frame *f UNUSED)
 		break;
 
 	case SYS_MMAP:
-		mmap();
+		mmap(f->R.rdi,f->R.rsi,f->R.rdx,f->R.r10,f->R.r8);
 		break;
 	
 	case SYS_MUNMAP:
-		munmap();
+		munmap(f->R.rdi);
 		break;
 
 	default:
@@ -357,4 +361,14 @@ void close(int fd)
 	}
 	file_close(f);
 	process_close_file(fd); // fdt에서 제거하기
+}
+ __pid_t
+mmap (int fd, void* addr) {
+	
+}
+
+void
+munmap (void *addr) {
+	
+
 }
