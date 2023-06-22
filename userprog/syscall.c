@@ -39,9 +39,12 @@ void seek(int fd, unsigned position);
 unsigned tell(int fd);
 void close(int fd);
 static void fd_validate(int fd);
-static bool mmap_validate(void *addr, size_t length, off_t offset);
-static void *mmap(void *addr, size_t length, int writable, int fd, off_t offset);
-static void munmap(void *addr);
+// static int process_add_file(struct file *f);
+// static bool mmap_validate(void *addr, size_t length, off_t offset);
+static void munmap(struct intr_frame *f);
+static void *mmap(struct intr_frame *f);
+
+static void ptr_check(void *ptr);
 static struct file *get_file(int fd);
 extern uint64_t stdin_file;
 extern uint64_t stdout_file;
@@ -125,20 +128,16 @@ void syscall_handler(struct intr_frame *f UNUSED)
 	case SYS_CLOSE:
 		close(f->R.rdi); // 13
 		break;
-	// case SYS_MMAP:
-	// 	f->R.rax = mmap(f->R.rdi, f->R.rsi, f->R.rdx, f->R.r10, f->R.r8);
-	// 	break;
-	// case SYS_MUNMAP:
-	// 	munmap(f->R.rdi);
-	// 	break;
-	default:
-		exit(-1);
+	case SYS_MMAP:
+		f->R.rax = mmap(f);
 		break;
+	case SYS_MUNMAP:
+		munmap(f);
+		break;
+		// printf("system call!\n");
+		// thread_exit ();
 	}
-	// printf("system call!\n");
-	// thread_exit ();
 }
-
 /*
  * 주어진 주소가 올바른 주소인지 확인하는 함수
  */
@@ -354,80 +353,115 @@ void close(int fd)
 	process_close_file(fd); // fdt에서 제거하기
 }
 
-// static void *mmap(void *addr, size_t length, int writable, int fd, off_t offset)
-// {
-// 	fd_validate(fd);
-// 	if (!mmap_validate(addr, length, offset))
-// 	{
-// 		return NULL;
-// 	}
-// 	// validate_address(addr);
+static void *mmap(struct intr_frame *f)
+{
+	void *addr = (void *)f->R.rdi;
+	size_t length = (size_t)f->R.rsi;
+	int writable = f->R.rdx;
+	int fd = f->R.r10;
+	off_t offset = (off_t)f->R.r8;
+	void *succ = NULL;
 
-// 	struct thread *curr = thread_current();
-// 	struct file *file = get_file(fd);
+	struct file *cur_file = get_file(fd);
+	/* 실패 할때 NULL 반환 */
 
-// 	if (file == NULL)
-// 		return NULL;
+	// fd로 열린 파일의 길이가 0 바이트 면 호출 실패 or length 이 0 일때도 실패
+	if (file_length(cur_file) <= 0 || (int)length <= 0)
+	{
+		return succ;
+	}
 
-// 	off_t filelength = file_length(file);
+	// addr 이 NULL 인 경우 실패 or addr이 페이지 정렬 안되면 실패
+	if (addr == NULL || ((uint64_t)addr % PGSIZE) != 0)
+	{
+		return succ;
+	}
 
-// 	if (length > filelength)
-// 		length = filelength;
+	/* 매핑된 페이지 범위가 실행 가능한 로드시간에 매핑된 스택 또는
+	페이지 포함하여 기존 매핑된 페이지 집합과 겹치는 경우 실패 ?? */
+	if (!is_user_vaddr(addr) || !is_user_vaddr(addr + length) || spt_find_page(&thread_current()->spt, addr))
+	{
+		return succ;
+	}
 
-// 	if (offset > length)
-// 		return NULL;
+	// 콘솔 입력 및 출력 파일 설명자는 매핑 할수 없다
+	if (fd == 0 || fd == 1)
+	{
+		return succ;
+	}
 
-// 	return do_mmap(addr, length, writable, file, offset);
-// }
-// static void munmap(void *addr)
-// {
-// 	check_address(addr);
-// 	// addr 가 PGSIZE 배수가 아니면 또 에러
-// 	if (((uint64_t)addr % PGSIZE) != 0)
-// 		exit(-1);
+	if (offset > length)
+	{
+		return succ;
+	}
 
-// 	struct mmap_file *mf = find_mmfile(addr);
-// 	if (mf == NULL)
-// 		exit(-1);
+	return do_mmap(addr, length, writable, cur_file, offset);
+}
 
-// 	do_munmap(addr);
-// }
-// static void fd_validate(int fd)
-// {
-// 	if (fd < 0 || fd >= 128)
-// 	{
-// 		exit(-1);
-// 	}
-// }
+static void munmap(struct intr_frame *f)
+{
+	void *addr = (void *)f->R.rdi;
 
-// static bool mmap_validate(void *addr, size_t length, off_t offset)
-// {
-// 	if (addr == NULL || ((uint64_t)addr % PGSIZE))
-// 		return false;
+	ptr_check(addr);
 
-// 	if (spt_find_page(&thread_current()->spt, addr))
-// 	{
-// 		return false;
-// 	}
+	// addr이 페이지 정렬 안되면 실패
+	if ((uint64_t)addr % PGSIZE != 0)
+	{
+		exit(-1);
+	}
 
-// 	if (!is_user_vaddr((uint64_t)addr) || !is_user_vaddr(addr + length))
-// 		return false;
+	do_munmap(addr);
+}
 
-// 	if ((int)length <= 0)
-// 		return false;
+/* 현재 존재하는 파일을 가져올때 파일이 없다면 exit(-1) 함*/
+static struct file *get_file(int fd)
+{
+	struct thread *curr = thread_current();
 
-// 	if (offset > length)
-// 		return NULL;
+	if (*(curr->fdt + fd) == NULL)
+	{
+		exit(-1);
+	}
 
-// 	return true;
-// }
-// static struct file *
-// get_file(int fd)
-// {
-// 	if (fd < 2 || fd >= 128)
-// 		exit(-1);
-// 	struct file *file = *(thread_current()->fdt + fd);
-// 	if (file == NULL)
-// 		exit(-1);
-// 	return file;
-// }
+	return *(curr->fdt + fd);
+}
+
+static void ptr_check(void *ptr)
+{
+	if (ptr == NULL || !is_user_vaddr((uint64_t)ptr))
+	{
+		exit(-1);
+	}
+}
+
+static void fd_check(int fd)
+{
+	if (fd < 0 || fd >= 128)
+	{
+		exit(-1);
+	}
+}
+
+/*
+ * 새로운 파일 객체제 대한 파일 디스크립터 생성하는 함수
+ * fdt에도 추가해준다.
+ */
+int process_add_file(struct file *f)
+{
+	struct thread *cur = thread_current();
+	struct file **fdt = cur->fdt;
+
+	// 범위를 벗어나지 않고 인덱스에 값이 존재하지 않을 때까지
+	while (cur->next_fd < 128 && fdt[cur->next_fd])
+	{
+		cur->next_fd++;
+	}
+
+	if (cur->next_fd >= 128)
+	{ // 범위를 넘어설 때까지 남은 공간이 없으면
+		return -1;
+	}
+	fdt[cur->next_fd] = f;
+
+	return cur->next_fd;
+}

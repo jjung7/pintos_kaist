@@ -51,9 +51,10 @@ struct page
 	struct frame *frame; /* Back reference for frame */
 	// struct vm_entry vm_entry;
 	bool writable;
-
+	int mapped_page_count;
 	struct hash_elem hash_elem;
 	struct list_elem p_elem;
+
 	/* Your implementation */
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */

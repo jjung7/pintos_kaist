@@ -549,8 +549,6 @@ vm_get_victim(void)
 			return victim;
 		}
 	}
-	lock_release(&lru_lock);
-	return victim;
 }
 
 /* Evict one page and return the corresponding frame.
@@ -609,6 +607,7 @@ vm_get_frame(void)
 	if (kva == NULL)
 	{
 		frame = vm_evict_frame();
+		memset(frame->kva, 0, PGSIZE);
 		frame->page = NULL;
 		frame->thread = thread_current();
 		return frame;
@@ -625,17 +624,34 @@ vm_get_frame(void)
 	return frame;
 }
 /* Growing the stack. */
-static void
-vm_stack_growth(void *addr)
-{
-	void *pg_addr = pg_round_down(addr);
-	ASSERT((uintptr_t)USER_STACK - (uintptr_t)pg_addr <= (1 << 20));
+// static void
+// vm_stack_growth(void *addr)
+// {
+// 	void *pg_addr = pg_round_down(addr);
+// 	ASSERT((uintptr_t)USER_STACK - (uintptr_t)pg_addr <= (1 << 20));
 
-	while (vm_alloc_page(VM_ANON, pg_addr, true))
+// 	while (vm_alloc_page(VM_ANON, pg_addr, true))
+// 	{
+// 		struct page *pg = spt_find_page(&thread_current()->spt, pg_addr);
+// 		vm_claim_page(pg_addr);
+// 		pg_addr += PGSIZE;
+// 	}
+// }
+
+static void
+vm_stack_growth(void *addr UNUSED)
+{
+	// rsp 가 addr 보다 작아질 때까지
+	struct thread *curr = thread_current();
+	uintptr_t asb = (uintptr_t)pg_round_down(curr->isp);
+
+	while (asb > (uintptr_t)addr)
 	{
-		struct page *pg = spt_find_page(&thread_current()->spt, pg_addr);
-		vm_claim_page(pg_addr);
-		pg_addr += PGSIZE;
+		asb -= PGSIZE;
+		if (vm_alloc_page(VM_ANON, asb, 1))
+		{
+			vm_claim_page(asb);
+		}
 	}
 }
 
@@ -878,7 +894,8 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 		}
 		else if (type == VM_FILE)
 		{
-			// vm file은 해줄 필요가 없다?
+			// vm file은 테스트 케이스가 없어서 패스
+
 			//  */
 			// 	if (!vm_alloc_page(type, entry->va, entry->writable))
 			// 	{

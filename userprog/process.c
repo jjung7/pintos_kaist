@@ -540,6 +540,23 @@ done:
 	return success;
 }
 
+bool lazy_load_seg(struct page *page, void *aux)
+{
+	struct file_page *file_page = (struct file_page *)aux;
+
+	file_seek(file_page->file, file_page->ofs);
+
+	if (file_read(file_page->file, page->frame->kva, file_page->read_bytes) != (int)(file_page->read_bytes))
+	{
+		palloc_free_page(page->frame->kva);
+		return false;
+	}
+	// 3) 다 읽은 지점부터 zero_bytes만큼 0으로 채운다.
+	memset(page->frame->kva + file_page->read_bytes, 0, file_page->zero_bytes);
+	// free(lazy_load_arg); // 🚨 Todo : 어디서 반환하지?
+
+	return true;
+}
 /* Checks whether PHDR describes a valid, loadable segment in
  * FILE and returns true if so, false otherwise. */
 static bool
@@ -864,26 +881,26 @@ struct thread *get_child_process(tid_t child_tid)
 /*
  * 새로운 파일 객체제 대한 파일 디스크립터 생성하는 함수
  * fdt에도 추가해준다.
- */
-int process_add_file(struct file *f)
-{
-	struct thread *cur = thread_current();
-	struct file **fdt = cur->fdt;
+//  */
+// int process_add_file(struct file *f)
+// {
+// 	struct thread *cur = thread_current();
+// 	struct file **fdt = cur->fdt;
 
-	// 범위를 벗어나지 않고 인덱스에 값이 존재하지 않을 때까지
-	while (cur->next_fd < FDT_COUNT_LIMIT && fdt[cur->next_fd])
-	{
-		cur->next_fd++;
-	}
+// 	// 범위를 벗어나지 않고 인덱스에 값이 존재하지 않을 때까지
+// 	while (cur->next_fd < FDT_COUNT_LIMIT && fdt[cur->next_fd])
+// 	{
+// 		cur->next_fd++;
+// 	}
 
-	if (cur->next_fd >= FDT_COUNT_LIMIT)
-	{ // 범위를 넘어설 때까지 남은 공간이 없으면
-		return -1;
-	}
-	fdt[cur->next_fd] = f;
+// 	if (cur->next_fd >= FDT_COUNT_LIMIT)
+// 	{ // 범위를 넘어설 때까지 남은 공간이 없으면
+// 		return -1;
+// 	}
+// 	fdt[cur->next_fd] = f;
 
-	return cur->next_fd;
-}
+// 	return cur->next_fd;
+// }
 
 /*
  * FDT에서 fd값을 가진 파일 객체 제거

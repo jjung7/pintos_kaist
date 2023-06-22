@@ -12,9 +12,9 @@ void process_activate(struct thread *next);
 
 void argument_stack(char **argv, int argc, void **rsp);
 struct thread *get_child_process(tid_t child_tid);
-// bool lazy_load_segment(struct page *page, void *aux);
+bool lazy_load_seg(struct page *page, void *aux);
 // 파일 디스크립터를 위한 함수
-int process_add_file(struct file *f);
+// int process_add_file(struct file *f);
 void process_close_file(int fd);
 struct file *process_get_file(int fd);
 
