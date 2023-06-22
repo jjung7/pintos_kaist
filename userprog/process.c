@@ -540,23 +540,6 @@ done:
 	return success;
 }
 
-bool lazy_load_seg(struct page *page, void *aux)
-{
-	struct file_page *file_page = (struct file_page *)aux;
-
-	file_seek(file_page->file, file_page->ofs);
-
-	if (file_read(file_page->file, page->frame->kva, file_page->read_bytes) != (int)(file_page->read_bytes))
-	{
-		palloc_free_page(page->frame->kva);
-		return false;
-	}
-	// 3) 다 읽은 지점부터 zero_bytes만큼 0으로 채운다.
-	memset(page->frame->kva + file_page->read_bytes, 0, file_page->zero_bytes);
-	// free(lazy_load_arg); // 🚨 Todo : 어디서 반환하지?
-
-	return true;
-}
 /* Checks whether PHDR describes a valid, loadable segment in
  * FILE and returns true if so, false otherwise. */
 static bool
@@ -921,7 +904,7 @@ void process_close_file(int fd)
 struct file *process_get_file(int fd)
 {
 	struct file **fdt = thread_current()->fdt;
-
+	// printf("fd: %d \n", fd);
 	if (fd < 2 || fd >= FDT_COUNT_LIMIT)
 	{
 		return NULL;

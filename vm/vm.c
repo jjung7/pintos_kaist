@@ -642,17 +642,7 @@ static void
 vm_stack_growth(void *addr UNUSED)
 {
 	// rsp 가 addr 보다 작아질 때까지
-	struct thread *curr = thread_current();
-	uintptr_t asb = (uintptr_t)pg_round_down(curr->isp);
-
-	while (asb > (uintptr_t)addr)
-	{
-		asb -= PGSIZE;
-		if (vm_alloc_page(VM_ANON, asb, 1))
-		{
-			vm_claim_page(asb);
-		}
-	}
+	vm_alloc_page(VM_ANON | VM_MARKER_0, pg_round_down(addr), true);
 }
 
 /* Handle the fault on write_protected page */
@@ -663,46 +653,45 @@ vm_handle_wp(struct page *page UNUSED)
 
 // Page Fault Handler
 /* Return true on success */
-bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
-						 bool user UNUSED, bool write UNUSED, bool not_present UNUSED)
+bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED, bool user UNUSED, bool write UNUSED, bool not_present UNUSED)
 {
-	// printf("page fault! %d %d %d\n", user, write, not_present);
-	struct supplemental_page_table *spt = &thread_current()->spt;
+	struct supplemental_page_table *spt UNUSED = &thread_current()->spt;
 	struct page *page = NULL;
-	enum vm_type vmtype;
-	bool stack_growth = false;
-	bool success = false;
 
-	/* TODO: Validate the fault */
-	/* TODO: Your code goes here */
-	if (!not_present)
+	if (addr == NULL)
 		return false;
-	if (is_kernel_vaddr(addr) && user)
-		return false;
-	// addr to page addr, abs??
-	void *va = pg_round_down(addr);
-	page = spt_find_page(spt, va);
 
-	if (page == NULL) // stack growth 가능성?
+	if (is_kernel_vaddr(addr))
+		return false;
+
+	if (not_present) // 접근한 메모리의 physical page가 존재하지 않은 경우
 	{
-		// allocated stack boundary
-		uintptr_t sp = thread_current()->isp;
-		uintptr_t asb = (uintptr_t)pg_round_down(sp);
-		stack_growth = (write && addr < asb && addr >= USER_STACK - (1 << 20)); // 스택 최대 크기 = 1MB, 기본 리눅스나 GNU에서는 스택 최대 크기는 8MB이다.
-	}
-	else if (page->writable < write)
-		return false;
+		/* TODO: Validate the fault */
+		// todo: 페이지 폴트가 스택 확장에 대한 유효한 경우인지를 확인해야 합니다.
+		void *rsp = f->rsp; // user access인 경우 rsp는 유저 stack을 가리킨다.
+		if (!user)			// kernel access인 경우 thread에서 rsp를 가져와야 한다.
+			rsp = thread_current()->isp;
 
-	if (page != NULL)
-	{
-		success = vm_do_claim_page(page);
-	}
-	else if (stack_growth)
-		vm_stack_growth(addr);
-	else
-		success = false;
+		// 스택 확장으로 처리할 수 있는 폴트인 경우, vm_stack_growth를 호출
+		if ((USER_STACK - (1 << 20) <= rsp - 8 &&
+			 rsp - 8 == addr &&
+			 addr <= USER_STACK) ||
+			(USER_STACK - (1 << 20) <= rsp &&
+			 rsp <= addr &&
+			 addr <= USER_STACK))
+		{
 
-	return (success || stack_growth);
+			vm_stack_growth(addr);
+		}
+
+		page = spt_find_page(spt, pg_round_down(addr));
+		if (page == NULL)
+			return false;
+		if (write && !page->writable) // write 불가능한 페이지에 write 요청한 경우
+			return false;
+		return vm_do_claim_page(page);
+	}
+	return false;
 }
 /* Free the page.
  * DO NOT MODIFY THIS FUNCTION. */
@@ -716,10 +705,9 @@ void vm_dealloc_page(struct page *page)
 bool vm_claim_page(void *va UNUSED)
 {
 	struct supplemental_page_table *spt = &thread_current()->spt;
-	struct page *page;
+	struct page *page = spt_find_page(spt, va);
 
 	/* TODO: Fill this function */
-	page = spt_find_page(spt, va);
 	if (page == NULL)
 		return false;
 
@@ -730,28 +718,24 @@ bool vm_claim_page(void *va UNUSED)
 static bool
 vm_do_claim_page(struct page *page)
 {
-	ASSERT(page != NULL);
-
-	struct thread *curr = thread_current();
 	struct frame *frame = vm_get_frame();
-	bool success;
 
 	/* Set links */
 	frame->page = page;
 	page->frame = frame;
 
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
-	// success = pml4_set_page(curr->pml4, page->va, frame->kva, page->rw);
-	if (!setup_page_table(page->va, frame->kva, page->writable))
+	/* TODO: 페이지 테이블 엔트리를 삽입하여
+	페이지의 가상 주소(VA)를 프레임의 물리 주소(PA)와 매핑합니다. */
+	struct thread *t = thread_current();
+	if (!pml4_set_page(thread_current()->pml4, page->va, frame->kva, page->writable))
 	{
-		// frame 해제 ?
-		printf("fail setup (%p to %p) page table\n", page->va, frame->kva);
+
 		return false;
 	}
 
-	return swap_in(page, frame->kva);
+	return swap_in(page, frame->kva); // uninit_initialize
 }
-
 void vm_free_frame(struct frame *frame)
 {
 	lock_acquire(&lru_lock);
@@ -832,33 +816,35 @@ void supplemental_page_table_init(struct supplemental_page_table *spt UNUSED)
 // 	return true;
 // }
 /* Copy supplemental page table from src to dst */
-bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
-								  struct supplemental_page_table *src UNUSED)
+bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED, struct supplemental_page_table *src UNUSED)
 {
+
+	// TODO: 보조 페이지 테이블을 src에서 dst로 복사합니다.
+	// TODO: src의 각 페이지를 순회하고 dst에 해당 entry의 사본을 만듭니다.
+	// TODO: uninit page를 할당하고 그것을 즉시 claim해야 합니다.
+
 	struct hash_iterator iter;
 	struct page *new_page;
 	struct page *entry;
 	enum vm_type type;
 
-	lock_acquire(&src->page_lock);
+	// lock_release(&src->page_lock);
 
 	hash_first(&iter, &src->pages);
-	// printf("hash_first successful? %d %d\n", iter, src->pages);
 	while (hash_next(&iter))
 	{
 		entry = hash_entry(hash_cur(&iter), struct page, hash_elem);
 		type = entry->operations->type;
-		// printf("what type? %d\n", type);
-		if (entry->frame == NULL)
-		{
-			// printf("frame is null, so we have to swap in entry << \n");
-		}
+
+		// if (entry->frame == NULL)
+		// {
+		//     // printf("frame is null, so we have to swap in entry << \n");
+		// }
 
 		if (type == VM_UNINIT)
 		{
 			void *aux = entry->uninit.aux;
 			enum vm_type real_type = page_get_type(entry);
-			// printf("what is real_type? %d\n", real_type);
 			struct file_page *fp = NULL;
 			if (aux != NULL)
 			{
@@ -868,7 +854,6 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 				fp->ofs = tp->ofs;
 				fp->read_bytes = tp->read_bytes;
 				fp->zero_bytes = tp->zero_bytes;
-				// printf("file open success? %d\n file ofs? %d\n, file read_bytes? %d", fp->file, fp->ofs, fp->read_bytes);
 			}
 
 			vm_alloc_page_with_initializer(real_type, entry->va, entry->writable, entry->uninit.init, fp);
@@ -883,37 +868,21 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 			*/
 			if (!vm_alloc_page(type, entry->va, entry->writable))
 			{
-				// printf("ANON 페이지 카피 실패\n");
+				printf("ANON 페이지 카피 실패\n");
 				return false;
 			}
 			if (!vm_claim_page(entry->va))
+			{
+				printf("success??\n");
 				return false;
+			}
 
 			void *dest = spt_find_page(dst, entry->va)->frame->kva;
 			memcpy(dest, entry->frame->kva, PGSIZE);
 		}
-		else if (type == VM_FILE)
-		{
-			// vm file은 테스트 케이스가 없어서 패스
-
-			//  */
-			// 	if (!vm_alloc_page(type, entry->va, entry->writable))
-			// 	{
-			// 		// printf("FILE 페이지 카피 실패\n");
-			// 		return false;
-			// 	}
-			// 	if (!vm_claim_page(entry->va))
-			// 		return false;
-			// 	struct page *page = spt_find_page(dst, entry->va);
-			// 	page->file.file = file_reopen(entry->file.file);
-			// 	page->file.ofs = entry->file.ofs;
-			// 	page->file.read_bytes = entry->file.read_bytes;
-			// 	page->file.zero_bytes = entry->file.zero_bytes;
-			// 	memcpy(page->va, entry->frame->kva, PGSIZE);
-		}
 	}
 
-	lock_release(&src->page_lock);
+	// lock_release(&src->page_lock);
 	return true;
 }
 

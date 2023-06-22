@@ -33,12 +33,12 @@ bool create(const char *file, unsigned initial_size);
 bool remove(const char *file);
 int open(const char *file);
 int filesize(int fd);
-int read(int fd, void *buffer, unsigned size);
+static int read(int fd, void *buffer, size_t size);
 int write(int fd, const void *buffer, unsigned size);
 void seek(int fd, unsigned position);
 unsigned tell(int fd);
 void close(int fd);
-static void fd_validate(int fd);
+static void fd_check(int fd);
 // static int process_add_file(struct file *f);
 // static bool mmap_validate(void *addr, size_t length, off_t offset);
 static void munmap(struct intr_frame *f);
@@ -82,7 +82,7 @@ void syscall_handler(struct intr_frame *f UNUSED)
 	// TODO: Your implementation goes here.
 
 	int sys_num = f->R.rax; // syscall number
-	// printf("sysnum: %d\n", sys_num);
+	printf("sysnum: %d\n", sys_num);
 	thread_current()->isp = f->rsp;
 	switch (sys_num)
 	{
@@ -203,15 +203,23 @@ int wait(int pid)
 // 파일 생성
 bool create(const char *file, unsigned initial_size)
 {
+	bool fret = false;
+	lock_acquire(&filesys_lock);
 	check_address(file); // 유저 영역의 주소인지 확인
-	return filesys_create(file, initial_size);
+	fret = filesys_create(file, initial_size);
+	lock_release(&filesys_lock);
+	return fret;
 }
 
 // 파일 삭제
 bool remove(const char *file)
 {
+	bool fret = false;
+	lock_acquire(&filesys_lock);
 	check_address(file); // 유저 영역의 주소인지 확인
-	return filesys_remove(file);
+	fret = filesys_remove(file);
+	lock_release(&filesys_lock);
+	return fret;
 }
 
 // 파일 열기
@@ -240,18 +248,35 @@ int open(const char *file)
 // 파일 크기
 int filesize(int fd)
 {
+	int fret = 0;
+	lock_acquire(&filesys_lock);
 	struct file *f = process_get_file(fd); // fd를 이용해 파일 가져오기
 	if (f == NULL)
 	{
 		return -1;
 	}
-	return file_length(f);
+	fret = file_length(f);
+	lock_release(&filesys_lock);
+	return fret;
 }
 
 // 파일 읽기
-int read(int fd, void *buffer, unsigned size)
+static int read(int fd, void *buffer, size_t size)
 {
+	// fd_check(fd);
 	check_address(buffer);
+	// buffer 페이지에 대해서 읽기만 있으면 안된다.
+	// #ifdef VM
+
+	// 	// 진짜 중요: spt find page 에서 va 로 찾을 때 va 는 페이지 단위여야 한다.
+	// 	// 꼭 명심하도록 하자!!!
+
+	// 		// 페이지가 존재하지만 스택영역 + 그중에서도 sp 보다 더 작다? 그러면 안된다!
+	// 	uintptr_t isp = thread_current()->isp;
+	// 	if (page->va == pg_round_down(isp) && buffer < isp)
+	// 		exit(-1);
+	// #endif
+
 	int result = 0;
 
 	if (fd == 0)
@@ -264,18 +289,24 @@ int read(int fd, void *buffer, unsigned size)
 	}
 	else
 	{
+		struct page *page = spt_find_page(&thread_current()->spt, pg_round_down(buffer));
+		if (page == NULL || !page->writable)
+		{
+			// printf("page = %p, is it writable? %d \n", page, page->writable);
+			exit(-1);
+		}
 		struct file *f = process_get_file(fd);
 		if (f == NULL)
 		{
 			return -1;
 		}
 		lock_acquire(&filesys_lock);
+		printf("asdfasdfadsf\n");
 		result = file_read(f, buffer, size);
 		lock_release(&filesys_lock);
 	}
 	return result;
 }
-
 // 파일 쓰기
 int write(int fd, const void *buffer, unsigned size)
 {

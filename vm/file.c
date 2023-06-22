@@ -8,6 +8,7 @@
 static bool file_backed_swap_in(struct page *page, void *kva);
 static bool file_backed_swap_out(struct page *page);
 static void file_backed_destroy(struct page *page);
+bool lazy_load_seg(struct page *page, void *aux);
 /* DO NOT MODIFY this struct */
 static const struct page_operations file_ops = {
 	.swap_in = file_backed_swap_in,
@@ -141,4 +142,19 @@ void do_munmap(void *addr)
 		addr += PGSIZE;
 		p = spt_find_page(spt, addr);
 	}
+}
+bool lazy_load_seg(struct page *page, void *aux)
+{
+	struct file_page *file_page = (struct file_page *)aux;
+
+	file_seek(file_page->file, file_page->ofs);
+
+	if (file_read(file_page->file, page->frame->kva, file_page->read_bytes) != (int)(file_page->read_bytes))
+	{
+		palloc_free_page(page->frame->kva);
+		return false;
+	}
+	// 3) 다 읽은 지점부터 zero_bytes만큼 0으로 채운다.
+	memset(page->frame->kva + file_page->read_bytes, 0, file_page->zero_bytes);
+	return true;
 }
