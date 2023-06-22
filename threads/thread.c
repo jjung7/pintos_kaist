@@ -451,6 +451,13 @@ init_thread(struct thread *t, const char *name, int priority)
 	sema_init(&t->wait_sema, 0);
 	list_init(&t->child_list);
 
+	// /* for File */
+
+	// /* for isp */
+	t->isp = 0;
+
+	/* for mmap_list */
+	// list_init(&t->mmap_list);
 	// sema 초기화
 }
 

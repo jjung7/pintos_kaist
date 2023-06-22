@@ -122,7 +122,7 @@ struct thread
 	struct semaphore load_sema; /* 로드 확인 */
 	struct semaphore exit_sema; /* 종료 확인 */
 	struct semaphore wait_sema; /* 기다림 확인 */
-
+	struct list mmap_list;
 	struct hash *vm; /*Hash table 생성*/
 	int pagedir;	 /*페이지 테이블 초기값을 가르키는 포인터*/
 #ifdef USERPROG
@@ -132,9 +132,9 @@ struct thread
 #ifdef VM
 	/* Table for whole virtual memory owned by thread. */
 	struct supplemental_page_table spt;
-	void *rsp;
-#endif
 
+#endif
+	uintptr_t isp;
 	/* Owned by thread.c. */
 	struct intr_frame tf; /* Information for switching */
 	unsigned magic;		  /* Detects stack overflow. */

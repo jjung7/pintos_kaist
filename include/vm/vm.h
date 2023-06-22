@@ -28,6 +28,7 @@ enum vm_type
 };
 #include "vm/uninit.h"
 #include "vm/anon.h"
+#include "threads/synch.h"
 #include "vm/file.h"
 // #include "threads/thread.h"
 #ifdef EFILESYS
@@ -36,7 +37,7 @@ enum vm_type
 
 struct page_operations;
 struct thread;
-struct lock *frame_page_table_lock;
+
 #define VM_TYPE(type) ((type)&7)
 
 /* The representation of "page".
@@ -52,6 +53,7 @@ struct page
 	bool writable;
 
 	struct hash_elem hash_elem;
+	struct list_elem p_elem;
 	/* Your implementation */
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */
@@ -118,7 +120,8 @@ struct page_operations
  * All designs up to you for this. */
 struct supplemental_page_table
 {
-	struct hash *pages;
+	struct lock page_lock;
+	struct hash pages;
 };
 
 struct frame_page_table

@@ -33,6 +33,7 @@ static void
 process_init(void)
 {
 	struct thread *current = thread_current();
+	// printf("process succesfully init \n");
 }
 
 /* Starts the first userland program, called "initd", loaded from FILE_NAME.
@@ -246,9 +247,10 @@ int process_exec(void *f_name)
 		count++;
 	}
 	/* ---------------------------------- */
-
+	lock_acquire(&filesys_lock);
 	/* And then load the binary */
 	success = load(file_name, &_if);
+	lock_release(&filesys_lock);
 
 	if (!success)
 	{
@@ -268,7 +270,7 @@ int process_exec(void *f_name)
 	/* If load failed, quit. */
 	palloc_free_page(file_name);
 	// if (!success)
-	// 	return -1;
+	//  return -1;
 
 	/* Start switched process. */
 	do_iret(&_if);
@@ -742,7 +744,7 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 
 		/* TODO: Set up aux to pass information to the lazy_load_segment. */
 		struct file_page *file_page = (struct file_page *)malloc(sizeof(struct file_page));
-		file_page->file = file;
+		file_page->file = file_reopen(file);
 		file_page->ofs = ofs;
 		file_page->read_bytes = read_bytes;
 		file_page->zero_bytes = zero_bytes;
@@ -750,7 +752,6 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		if (!vm_alloc_page_with_initializer(VM_ANON, upage,
 											writable, lazy_load_segment, file_page))
 		{
-			free(file_page);
 			return false;
 		}
 
@@ -818,30 +819,30 @@ void argument_stack(char **argv, int argc, void **rsp)
 }
 // static void argument_stack(char *argv[], int argc, char **sp)
 // {
-// 	int start = 4;
-// 	for (int i = argc - 1; i >= 0; i--)
-// 	{
-// 		strlcpy(*sp, argv[i], strlen(argv[i]) + 1);
-// 		*sp = *sp - strlen(argv[i]) + 1;
-// 		start += strlen(argv[i] + 1);
-// 		argv[i] = *sp;
-// 	}
-// 	memset(*sp, 0, 8 - (start % 8) == 8 ? 0 : start % 8);
+//  int start = 4;
+//  for (int i = argc - 1; i >= 0; i--)
+//  {
+//      strlcpy(*sp, argv[i], strlen(argv[i]) + 1);
+//      *sp = *sp - strlen(argv[i]) + 1;
+//      start += strlen(argv[i] + 1);
+//      argv[i] = *sp;
+//  }
+//  memset(*sp, 0, 8 - (start % 8) == 8 ? 0 : start % 8);
 
-// 	*sp -= 8 - (start % 8) == 8 ? 0 : start % 8;
-// 	**sp = 0;
-// 	*sp -= 1;
+//  *sp -= 8 - (start % 8) == 8 ? 0 : start % 8;
+//  **sp = 0;
+//  *sp -= 1;
 
-// 	for (int j = argc; j >= 0; j--)
-// 	{
-// 		strlcpy(*sp, &argv[j], 4);
-// 		*sp = *sp - 4;
-// 	}
-// 	strlcpy(*sp, argc, 4);
-// 	*sp = *sp - 4;
-// 	strlcpy(*sp, 0, 0);
-// 	*sp = *sp - 4;
-// 	return *sp;
+//  for (int j = argc; j >= 0; j--)
+//  {
+//      strlcpy(*sp, &argv[j], 4);
+//      *sp = *sp - 4;
+//  }
+//  strlcpy(*sp, argc, 4);
+//  *sp = *sp - 4;
+//  strlcpy(*sp, 0, 0);
+//  *sp = *sp - 4;
+//  return *sp;
 // }
 /*
  * 자식 리스트에서 child_tid를 가진 스레드 찾는 함수
@@ -910,24 +911,3 @@ struct file *process_get_file(int fd)
 	}
 	return fdt[fd];
 }
-
-// bool handle_mm_fault(struct vm_entry *vme){
-// 	bool success;
-// 	void *kaddr;
-
-// 	switch(vme->type){
-// 		case VM_UNINIT:
-// 		success = load_file(kaddr,vme)
-// 		break;
-
-// 		case VM_FILE:
-// 		success = load_file(kaddr,vme)
-
-// 		case VM_ANON:
-// 		//swap in code
-// 		break
-
-// 		default:
-// 		break;
-// 	}
-// }
