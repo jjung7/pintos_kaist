@@ -82,7 +82,7 @@ void syscall_handler(struct intr_frame *f UNUSED)
 	// TODO: Your implementation goes here.
 
 	int sys_num = f->R.rax; // syscall number
-	printf("sysnum: %d\n", sys_num);
+	// printf("sysnum: %d\n", sys_num);
 	thread_current()->isp = f->rsp;
 	switch (sys_num)
 	{
@@ -290,7 +290,7 @@ static int read(int fd, void *buffer, size_t size)
 	else
 	{
 		struct page *page = spt_find_page(&thread_current()->spt, pg_round_down(buffer));
-		if (page == NULL || !page->writable)
+		if (page && !page->writable)
 		{
 			// printf("page = %p, is it writable? %d \n", page, page->writable);
 			exit(-1);
@@ -301,7 +301,6 @@ static int read(int fd, void *buffer, size_t size)
 			return -1;
 		}
 		lock_acquire(&filesys_lock);
-		printf("asdfasdfadsf\n");
 		result = file_read(f, buffer, size);
 		lock_release(&filesys_lock);
 	}

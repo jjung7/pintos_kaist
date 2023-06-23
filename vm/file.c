@@ -130,18 +130,34 @@ do_mmap(void *addr, size_t length, int writable, struct file *file, off_t offset
 /* Do the munmap */
 void do_munmap(void *addr)
 {
+	printf("do unmap\n");
 	struct supplemental_page_table *spt = &thread_current()->spt;
+	printf("1\n");
 	struct page *p = spt_find_page(spt, addr);
+
+	if (p->frame == NULL)
+	{
+		printf("page not mapped\n");
+		vm_claim_page(addr);
+	}
+	printf("2\n");
 	int count = p->mapped_page_count;
+	printf("3\n");
 	for (int i = 0; i < count; i++)
 	{
+		printf("3-1\n");
 		if (p)
 		{
 			destroy(p);
 		}
 		addr += PGSIZE;
 		p = spt_find_page(spt, addr);
+		printf("3-2\n");
 	}
+	printf("4\n");
+
+	file_close(p->file.file);
+	printf("5\n");
 }
 bool lazy_load_seg(struct page *page, void *aux)
 {
