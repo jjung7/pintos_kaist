@@ -37,7 +37,7 @@ void vm_anon_init(void)
 	// 페이지 사이즈: 4KB, 섹터 사이즈: 512 B: 8 개의 섹터 = 1 Swap slot
 	// 따라서 스왑 디스크의 섹터 개수 / 8 = Swap slot 개수
 	swap_disk = disk_get(1, 1);
-	sectors = disk_size(swap_disk);
+	sectors = disk_size(swap_disk) / 8;
 	swap_bitmap = bitmap_create(sectors);
 }
 
@@ -51,7 +51,6 @@ bool anon_initializer(struct page *page, enum vm_type type, void *kva)
 
 	struct anon_page *anon_page = &page->anon;
 	anon_page->ofs = -1;
-
 	return true;
 }
 
@@ -69,7 +68,6 @@ anon_swap_in(struct page *page, void *kva)
 {
 	struct anon_page *anon_page = &page->anon;
 	size_t offset = anon_page->ofs;
-
 	if (bitmap_test(swap_bitmap, offset) == 0)
 	{
 		PANIC("스왑디스크에 없음. 따라서 swap in 못함!");
@@ -95,6 +93,7 @@ anon_swap_in(struct page *page, void *kva)
 static bool
 anon_swap_out(struct page *page)
 {
+
 	struct anon_page *anon_page = &page->anon;
 	uint64_t *pml4 = thread_current()->pml4;
 	void *buff = page->frame->kva;
@@ -114,6 +113,7 @@ anon_swap_out(struct page *page)
 	anon_page->ofs = offset;
 	page->frame = NULL;
 	pml4_clear_page(pml4, page->va);
+
 	return true;
 }
 
@@ -122,6 +122,7 @@ anon_swap_out(struct page *page)
 static void
 anon_destroy(struct page *page)
 {
+
 	struct anon_page *anon_page = &page->anon;
 	struct frame *frame = page->frame;
 	if (frame != NULL) // frame 해제

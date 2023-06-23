@@ -136,6 +136,9 @@ void syscall_handler(struct intr_frame *f UNUSED)
 		break;
 		// printf("system call!\n");
 		// thread_exit ();
+	default:
+		exit(-1);
+		break;
 	}
 }
 /*

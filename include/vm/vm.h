@@ -74,7 +74,6 @@ struct frame
 {
 	void *kva;
 	struct page *page;
-	struct thread *thread;
 	struct list_elem lru_elem;
 };
 

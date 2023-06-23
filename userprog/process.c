@@ -299,7 +299,6 @@ int process_wait(tid_t child_tid UNUSED)
 	sema_down(&child->wait_sema);
 	list_remove(&child->child_elem);
 	sema_up(&child->exit_sema);
-
 	return child->exit_status;
 }
 
@@ -698,6 +697,7 @@ install_page(void *upage, void *kpage, bool writable)
 static bool
 lazy_load_segment(struct page *page, void *aux)
 {
+
 	struct file_page *file_page = (struct file_page *)aux;
 	file_seek(file_page->file, file_page->ofs);
 	if (file_read(file_page->file, page->frame->kva, file_page->read_bytes) != (int)(file_page->read_bytes))
@@ -706,11 +706,11 @@ lazy_load_segment(struct page *page, void *aux)
 		return false;
 	}
 	memset(page->frame->kva + file_page->read_bytes, 0, file_page->zero_bytes);
-
+	free(file_page);
 	return true;
-}; /* TODO: Load the segment from the file */
-   /* TODO: This called when the first page fault occurs on address VA. */
-   /* TODO: VA is available when calling this function. */
+} /* TODO: Load the segment from the file */
+  /* TODO: This called when the first page fault occurs on address VA. */
+  /* TODO: VA is available when calling this function. */
 
 /* Loads a segment starting at offset OFS in FILE at address
  * UPAGE.  In total, READ_BYTES + ZERO_BYTES bytes of virtual
@@ -746,8 +746,8 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		struct file_page *file_page = (struct file_page *)malloc(sizeof(struct file_page));
 		file_page->file = file;
 		file_page->ofs = ofs;
-		file_page->read_bytes = read_bytes;
-		file_page->zero_bytes = zero_bytes;
+		file_page->read_bytes = page_read_bytes;
+		file_page->zero_bytes = page_zero_bytes;
 
 		if (!vm_alloc_page_with_initializer(VM_ANON, upage,
 											writable, lazy_load_segment, file_page))
