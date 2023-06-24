@@ -230,7 +230,9 @@ int open(const char *file)
 {
 	check_address(file);
 	// printf("check address successful\n");
+	lock_acquire(&filesys_lock);
 	struct file *f = filesys_open(file);
+	lock_release(&filesys_lock);
 	// printf("open successful?\n");
 	if (f == NULL)
 	{

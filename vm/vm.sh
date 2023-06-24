@@ -20,11 +20,12 @@ clear
 
 
 # tests/vm/swap-file
-make tests/vm/page-merge-par.result
+# pintos -v -k -T 180 -m 10   —fs-disk=10 -p tests/vm/swap-iter:swap-iter -p ../../tests/vm/large.txt:large.txt —swap-disk=50 — -q   -f run swap-iter
 # FAIL tests/vm/swap-anon
 # FAIL tests/vm/swap-iter
 # FAIL tests/vm/swap-fork
-# make tests/vm/page-merge-par.result
+pintos -v -k -T 180 -m 10   --fs-disk=10 -p tests/vm/swap-iter:swap-iter -p ../../tests/vm/large.txt:large.txt --swap-disk=50 -- -q   -f run swap-iter
+make tests/vm/swap-iter.result
 # make tests/vm/page-merge-stk.result
 # pintos -v -k -T 60 -m 20   --fs-disk=10 -p tests/vm/page-merge-mm:page-merge-mm -p tests/vm/child-qsort-mm:child-qsort-mm --swap-disk=10 -- -q   -f run page-merge-mm
 # make tests/vm/page-merge-mm.result
