@@ -33,6 +33,7 @@ static void
 process_init(void)
 {
 	struct thread *current = thread_current();
+	// printf("process succesfully init \n");
 }
 
 /* Starts the first userland program, called "initd", loaded from FILE_NAME.
@@ -246,9 +247,10 @@ int process_exec(void *f_name)
 		count++;
 	}
 	/* ---------------------------------- */
-
+	lock_acquire(&filesys_lock);
 	/* And then load the binary */
 	success = load(file_name, &_if);
+	lock_release(&filesys_lock);
 
 	if (!success)
 	{
@@ -268,7 +270,7 @@ int process_exec(void *f_name)
 	/* If load failed, quit. */
 	palloc_free_page(file_name);
 	// if (!success)
-	// 	return -1;
+	//  return -1;
 
 	/* Start switched process. */
 	do_iret(&_if);
@@ -297,7 +299,6 @@ int process_wait(tid_t child_tid UNUSED)
 	sema_down(&child->wait_sema);
 	list_remove(&child->child_elem);
 	sema_up(&child->exit_sema);
-
 	return child->exit_status;
 }
 
@@ -696,10 +697,20 @@ install_page(void *upage, void *kpage, bool writable)
 static bool
 lazy_load_segment(struct page *page, void *aux)
 {
-	/* TODO: Load the segment from the file */
-	/* TODO: This called when the first page fault occurs on address VA. */
-	/* TODO: VA is available when calling this function. */
-}
+
+	struct file_page *file_page = (struct file_page *)aux;
+	file_seek(file_page->file, file_page->ofs);
+	if (file_read(file_page->file, page->frame->kva, file_page->read_bytes) != (int)(file_page->read_bytes))
+	{
+		palloc_free_page(page->frame->kva);
+		return false;
+	}
+	memset(page->frame->kva + file_page->read_bytes, 0, file_page->zero_bytes);
+	free(file_page);
+	return true;
+} /* TODO: Load the segment from the file */
+  /* TODO: This called when the first page fault occurs on address VA. */
+  /* TODO: VA is available when calling this function. */
 
 /* Loads a segment starting at offset OFS in FILE at address
  * UPAGE.  In total, READ_BYTES + ZERO_BYTES bytes of virtual
@@ -732,15 +743,23 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
 		/* TODO: Set up aux to pass information to the lazy_load_segment. */
-		void *aux = NULL;
+		struct file_page *file_page = (struct file_page *)malloc(sizeof(struct file_page));
+		file_page->file = file;
+		file_page->ofs = ofs;
+		file_page->read_bytes = page_read_bytes;
+		file_page->zero_bytes = page_zero_bytes;
+
 		if (!vm_alloc_page_with_initializer(VM_ANON, upage,
-											writable, lazy_load_segment, aux))
+											writable, lazy_load_segment, file_page))
+		{
 			return false;
+		}
 
 		/* Advance. */
 		read_bytes -= page_read_bytes;
 		zero_bytes -= page_zero_bytes;
 		upage += PGSIZE;
+		ofs += page_read_bytes;
 	}
 	return true;
 }
@@ -751,7 +770,12 @@ setup_stack(struct intr_frame *if_)
 {
 	bool success = false;
 	void *stack_bottom = (void *)(((uint8_t *)USER_STACK) - PGSIZE);
-
+	if (vm_alloc_page(VM_ANON | VM_MARKER_0, stack_bottom, true))
+	{
+		success = vm_claim_page(stack_bottom);
+		if (success)
+			if_->rsp = USER_STACK;
+	}
 	/* TODO: Map the stack on stack_bottom and claim the page immediately.
 	 * TODO: If success, set the rsp accordingly.
 	 * TODO: You should mark the page is stack. */
@@ -793,33 +817,33 @@ void argument_stack(char **argv, int argc, void **rsp)
 	(*rsp) -= 8; // return 값의 주소인 fake address 저장
 	**(void ***)rsp = 0;
 }
-static void argument_stack(char *argv[], int argc, char **sp)
-{
-	int start = 4;
-	for (int i = argc - 1; i >= 0; i--)
-	{
-		strlcpy(*sp, argv[i], strlen(argv[i]) + 1);
-		*sp = *sp - strlen(argv[i]) + 1;
-		start += strlen(argv[i] + 1);
-		argv[i] = *sp;
-	}
-	memset(*sp, 0, 8 - (start % 8) == 8 ? 0 : start % 8);
+// static void argument_stack(char *argv[], int argc, char **sp)
+// {
+//  int start = 4;
+//  for (int i = argc - 1; i >= 0; i--)
+//  {
+//      strlcpy(*sp, argv[i], strlen(argv[i]) + 1);
+//      *sp = *sp - strlen(argv[i]) + 1;
+//      start += strlen(argv[i] + 1);
+//      argv[i] = *sp;
+//  }
+//  memset(*sp, 0, 8 - (start % 8) == 8 ? 0 : start % 8);
 
-	*sp -= 8 - (start % 8) == 8 ? 0 : start % 8;
-	**sp = 0;
-	*sp -= 1;
+//  *sp -= 8 - (start % 8) == 8 ? 0 : start % 8;
+//  **sp = 0;
+//  *sp -= 1;
 
-	for (int j = argc; j >= 0; j--)
-	{
-		strlcpy(*sp, &argv[j], 4);
-		*sp = *sp - 4;
-	}
-	strlcpy(*sp, argc, 4);
-	*sp = *sp - 4;
-	strlcpy(*sp, 0, 0);
-	*sp = *sp - 4;
-	return *sp;
-}
+//  for (int j = argc; j >= 0; j--)
+//  {
+//      strlcpy(*sp, &argv[j], 4);
+//      *sp = *sp - 4;
+//  }
+//  strlcpy(*sp, argc, 4);
+//  *sp = *sp - 4;
+//  strlcpy(*sp, 0, 0);
+//  *sp = *sp - 4;
+//  return *sp;
+// }
 /*
  * 자식 리스트에서 child_tid를 가진 스레드 찾는 함수
  */
@@ -840,26 +864,26 @@ struct thread *get_child_process(tid_t child_tid)
 /*
  * 새로운 파일 객체제 대한 파일 디스크립터 생성하는 함수
  * fdt에도 추가해준다.
- */
-int process_add_file(struct file *f)
-{
-	struct thread *cur = thread_current();
-	struct file **fdt = cur->fdt;
+//  */
+// int process_add_file(struct file *f)
+// {
+// 	struct thread *cur = thread_current();
+// 	struct file **fdt = cur->fdt;
 
-	// 범위를 벗어나지 않고 인덱스에 값이 존재하지 않을 때까지
-	while (cur->next_fd < FDT_COUNT_LIMIT && fdt[cur->next_fd])
-	{
-		cur->next_fd++;
-	}
+// 	// 범위를 벗어나지 않고 인덱스에 값이 존재하지 않을 때까지
+// 	while (cur->next_fd < FDT_COUNT_LIMIT && fdt[cur->next_fd])
+// 	{
+// 		cur->next_fd++;
+// 	}
 
-	if (cur->next_fd >= FDT_COUNT_LIMIT)
-	{ // 범위를 넘어설 때까지 남은 공간이 없으면
-		return -1;
-	}
-	fdt[cur->next_fd] = f;
+// 	if (cur->next_fd >= FDT_COUNT_LIMIT)
+// 	{ // 범위를 넘어설 때까지 남은 공간이 없으면
+// 		return -1;
+// 	}
+// 	fdt[cur->next_fd] = f;
 
-	return cur->next_fd;
-}
+// 	return cur->next_fd;
+// }
 
 /*
  * FDT에서 fd값을 가진 파일 객체 제거
@@ -880,7 +904,7 @@ void process_close_file(int fd)
 struct file *process_get_file(int fd)
 {
 	struct file **fdt = thread_current()->fdt;
-
+	// printf("fd: %d \n", fd);
 	if (fd < 2 || fd >= FDT_COUNT_LIMIT)
 	{
 		return NULL;
