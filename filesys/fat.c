@@ -164,13 +164,13 @@ void fat_fs_init(void)
 	/* TODO: Your code goes here. */
 	// magic도 초기화 해줘야하나?
 	lock_init(&fat_fs->write_lock);
-	fat_fs->data_start = fat_fs->bs.fat_start;
-	fat_fs->fat_length = disk_size(filesys_disk) / 8;
+	fat_fs->data_start = fat_fs->bs.fat_start + fat_fs->bs.fat_sectors;
+	fat_fs->fat_length = fat_fs->bs.total_sectors / fat_fs->bs.sectors_per_cluster;
 	fat_fs->last_clst = 0;
 }
 
 /*----------------------------------------------------------------------------*/
-/* FAT handling                                                               */
+/* FAT handling */
 /*----------------------------------------------------------------------------*/
 
 /* Add a cluster to the chain.
@@ -221,15 +221,15 @@ void fat_remove_chain(cluster_t clst, cluster_t pclst)
 /* Update a value in the FAT table. */
 void fat_put(cluster_t clst, cluster_t val) // last_clst도 update 해줘야하나? size는?
 {
-	cluster_t idx = 0;
-	for (idx; idx < fat_fs->fat_length; idx++) // 연결 끊어주기
-	{
-		if (fat_fs->fat[idx] == val)
-		{
-			fat_fs->fat[idx] = EOChain;
-			break;
-		}
-	}
+	// cluster_t idx = 0;
+	// for (idx; idx < fat_fs->fat_length; idx++) // 연결 끊어주기
+	// {
+	// if (fat_fs->fat[idx] == val)
+	// {
+	// fat_fs->fat[idx] = EOChain;
+	// break;
+	// }
+	// }
 	fat_fs->fat[clst] = val;
 	/* TODO: Your code goes here. */
 }
@@ -246,8 +246,14 @@ fat_get(cluster_t clst)
 disk_sector_t
 cluster_to_sector(cluster_t clst)
 {
-	disk_sector_t num = 0;
-	num = get_size(filesys_disk) / 512 * clst;
+	disk_sector_t num = fat_fs->data_start;
+	for (int i = 0; i < clst - ROOT_DIR_CLUSTER; ++i)
+	{
+		num += fat_fs->bs.sectors_per_cluster;
+	}
 	return num;
+	// disk_sector_t num = fat_fs->data_start;
+	// num = get_size(filesys_disk) / 512 * clst;
+	// return num;
 	/* TODO: Your code goes here. */
 }
